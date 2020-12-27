@@ -1,53 +1,44 @@
-namespace Company.Function
-
-open System
-open System.IO
-open Microsoft.AspNetCore.Mvc
+namespace TennisBot
+open Giraffe
+open Microsoft.AspNetCore.Http
 open Microsoft.Azure.WebJobs
 open Microsoft.Azure.WebJobs.Extensions.Http
-open Microsoft.AspNetCore.Http
-open Newtonsoft.Json
+open System.Threading.Tasks
+open FSharp.Control.Tasks.V2
 open Microsoft.Extensions.Logging
 
-module HttpTrigger =
-    // Define a nullable container to deserialize into.
-    [<AllowNullLiteral>]
-    type NameContainer() =
-        member val Name = "" with get, set
+module Run =
 
-    // For convenience, it's better to have a central place for the literal.
-    [<Literal>]
-    let Name = "name"
 
-    [<FunctionName("HttpTrigger")>]
-    let run ([<HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)>]req: HttpRequest) (log: ILogger) =
-        async {
-            log.LogInformation("F# HTTP trigger function processed a request.")
+    let app : HttpHandler =
 
-            let nameOpt = 
-                if req.Query.ContainsKey(Name) then
-                    Some(req.Query.[Name].[0])
-                else
-                    None
+        choose [
 
-            use stream = new StreamReader(req.Body)
-            let! reqBody = stream.ReadToEndAsync() |> Async.AwaitTask
+            GET >=> route "/api/demo" >=> text "Giraffe up and running"
 
-            let data = JsonConvert.DeserializeObject<NameContainer>(reqBody)
+            GET >=> route "/api/demo/failing" >=> warbler (fun _ -> failwith "FAILURE")
 
-            let name =
-                match nameOpt with
-                | Some n -> n
-                | None ->
-                   match data with
-                   | null -> ""
-                   | nc -> nc.Name
-            
-            let responseMessage =             
-                if (String.IsNullOrWhiteSpace(name)) then
-                    "It's F#! This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
-                else
-                    "It's F#! Hello, " +  name
-                    
-            return OkObjectResult(responseMessage) :> IActionResult
-        } |> Async.StartAsTask
+            RequestErrors.NOT_FOUND "Not Found"
+        ]
+
+
+    let errorHandler (ex : exn) (logger : ILogger) =
+        logger.LogError(EventId(), ex, "An unhandled exception has occurred while executing the request.")
+        clearResponse
+        >=> ServerErrors.INTERNAL_ERROR ex.Message
+
+
+    [<FunctionName "TennisBot">]
+    let run ([<HttpTrigger (AuthorizationLevel.Anonymous, Route = "{*any}")>] req : HttpRequest, context : ExecutionContext, log : ILogger) =
+        let hostingEnvironment = req.HttpContext.GetHostingEnvironment()
+        hostingEnvironment.ContentRootPath <- context.FunctionAppDirectory
+        let func = Some >> Task.FromResult
+        { new Microsoft.AspNetCore.Mvc.IActionResult with
+              member _.ExecuteResultAsync(ctx) = 
+                  task {
+                      try
+                          return! app func ctx.HttpContext :> Task
+                      with exn ->
+                          return! errorHandler exn log func ctx.HttpContext :> Task
+                  }
+                  :> Task }
