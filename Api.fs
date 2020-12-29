@@ -1,5 +1,6 @@
 namespace TennisBot
 
+open System
 open System.IO
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Logging
@@ -13,16 +14,26 @@ module Api =
 
     let webHookRoute telegramToken = $"/api/{telegramToken}"
 
+    let renderAvailableCourts (availableCourts : (DateTime * seq<{| Court: string; Time: string |}>) array) =
+        [
+            for date, courts in availableCourts do
+                $"""---Date: {date.ToString("MM-dd")}---"""
+                for time, group in courts |> Seq.groupBy (fun c -> c.Time) do
+                    let courtCodes = group |> Seq.map (fun c -> c.Court)
+                    $"""Time: {time}, Courts: {String.concat ", " courtCodes}"""
+        ]
+        |> String.concat "\n"
+
     let updateHandler (logger : ILogger) telegramToken : HttpHandler =
         bindModel<Update> None (fun update ->
-            let name = update.Message.Value.From.Value.FirstName
             let chatId = update.Message.Value.Chat.Id
-            scrapeAvailableCourts()
-            |> Seq.map (fun availableCourt ->
-                $"Court: {availableCourt.Court}, Time: {availableCourt.Time}")
-            |> String.concat "\n"
-            |> sendMessage logger telegramToken chatId
-            |> ignore
+            async {
+                let! availableCourts = scrapeAvailableCourts()
+                renderAvailableCourts availableCourts
+                |> sendMessage logger telegramToken chatId
+                |> ignore
+            }
+            |> Async.Start
             Successful.OK "")
 
     let logRequest (logger : ILogger) : HttpHandler =
