@@ -5,6 +5,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Logging
 open FSharp.Control.Tasks.V2.ContextInsensitive
 open Giraffe
+open System.Threading.Tasks
 
 module Api =
     open Telegram
@@ -15,7 +16,7 @@ module Api =
         bindModel<Update> None (fun update ->
             let name = update.Message.Value.From.Value.FirstName
             let chatId = update.Message.Value.Chat.Id
-            sendMessage logger telegramToken chatId $"Hello {name}" |> Async.Start
+            sendMessage logger telegramToken chatId $"Hello {name}" |> ignore
             Successful.OK "")
 
     let logRequest (logger : ILogger) : HttpHandler =
