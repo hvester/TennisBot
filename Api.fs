@@ -9,6 +9,7 @@ open System.Threading.Tasks
 
 module Api =
     open Telegram
+    open BookingScraper
 
     let webHookRoute telegramToken = $"/api/{telegramToken}"
 
@@ -16,7 +17,12 @@ module Api =
         bindModel<Update> None (fun update ->
             let name = update.Message.Value.From.Value.FirstName
             let chatId = update.Message.Value.Chat.Id
-            sendMessage logger telegramToken chatId $"Hello {name}" |> ignore
+            scrapeAvailableCourts()
+            |> Seq.map (fun availableCourt ->
+                $"Court: {availableCourt.Court}, Time: {availableCourt.Time}")
+            |> String.concat "\n"
+            |> sendMessage logger telegramToken chatId
+            |> ignore
             Successful.OK "")
 
     let logRequest (logger : ILogger) : HttpHandler =
