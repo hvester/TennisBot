@@ -9,31 +9,31 @@ open Giraffe
 open System.Threading.Tasks
 
 module Api =
+    open TennisBot
     open Telegram
     open BookingScraper
 
     let webHookRoute telegramToken = $"/api/{telegramToken}"
 
-    let renderAvailableCourts (availableCourts : (DateTime * seq<{| Court: string; Time: string |}>) array) =
-        [
-            for date, courts in availableCourts do
-                $"""---Date: {date.ToString("MM-dd")}---"""
-                for time, group in courts |> Seq.groupBy (fun c -> c.Time) do
-                    let courtCodes = group |> Seq.map (fun c -> c.Court)
-                    $"""Time: {time}, Courts: {String.concat ", " courtCodes}"""
-        ]
-        |> String.concat "\n"
 
     let updateHandler (logger : ILogger) telegramToken : HttpHandler =
-        bindModel<Update> None (fun update ->
+        bindModel<Dto.Update> None (fun update ->
             let chatId = update.Message.Value.Chat.Id
-            async {
-                let! availableCourts = scrapeAvailableCourts()
-                renderAvailableCourts availableCourts
-                |> sendMessage logger telegramToken chatId
-                |> ignore
-            }
-            |> Async.Start
+            update.Message
+            |> Option.map Dto.toDomainMessage
+            |> function
+                | Some (Ok message) ->
+                    async {
+                        let! respose = handleMessage message
+                        do! sendMessage logger telegramToken chatId respose |> Async.AwaitTask
+                    }
+                    |> Async.Start
+
+                | Some (Error errorMessage) ->
+                    sendMessage logger telegramToken chatId errorMessage |> ignore
+                
+                | None ->
+                    ()
             Successful.OK "")
 
     let logRequest (logger : ILogger) : HttpHandler =

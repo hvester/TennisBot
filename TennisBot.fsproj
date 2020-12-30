@@ -5,8 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Json.fs" />
-    <Compile Include="Telegram.fs" />
     <Compile Include="BookingScraper.fs" />
+    <Compile Include="TennisBot.fs" />
+    <Compile Include="Telegram.fs" />
     <Compile Include="Api.fs" />
     <Compile Include="HttpTrigger.fs" />
     <Compile Include="Startup.fs" />
