@@ -14,13 +14,13 @@ module TennisBot =
         | Text of string
 
 
-    let renderAvailableCourts (availableCourts : (DateTime * seq<{| Court: string; Time: string |}>) array) =
+    let renderAvailableCourts availableCourts =
         [
-            for date, courts in availableCourts do
+            for date, courts in List.groupBy (fun x -> x.Time.Date) availableCourts do
                 $"""---Date: {date.ToString("MM-dd")}---"""
                 for time, group in courts |> Seq.groupBy (fun c -> c.Time) do
                     let courtCodes = group |> Seq.map (fun c -> c.Court)
-                    $"""Time: {time}, Courts: {String.concat ", " courtCodes}"""
+                    $"""Time: {time.ToString("HH:mm")}, Courts: {String.concat ", " courtCodes}"""
         ]
         |> String.concat "\n"
 

@@ -11,30 +11,32 @@ open System.Threading.Tasks
 module Api =
     open TennisBot
     open Telegram
-    open BookingScraper
 
-    let webHookRoute telegramToken = $"/api/{telegramToken}"
+
+    let handleUpdate (logger : ILogger) telegramToken (update : Dto.Update) =
+        let chatId = update.Message.Value.Chat.Id
+        update.Message
+        |> Option.map Dto.toDomainMessage
+        |> function
+            | Some (Ok message) ->
+                async {
+                    let! respose = handleMessage message
+                    do! sendMessage logger telegramToken chatId respose |> Async.AwaitTask
+                }
+                |> Async.Start
+
+            | Some (Error errorMessage) ->
+                sendMessage logger telegramToken chatId errorMessage |> ignore
+            
+            | None ->
+                ()
 
 
     let updateHandler (logger : ILogger) telegramToken : HttpHandler =
         bindModel<Dto.Update> None (fun update ->
-            let chatId = update.Message.Value.Chat.Id
-            update.Message
-            |> Option.map Dto.toDomainMessage
-            |> function
-                | Some (Ok message) ->
-                    async {
-                        let! respose = handleMessage message
-                        do! sendMessage logger telegramToken chatId respose |> Async.AwaitTask
-                    }
-                    |> Async.Start
-
-                | Some (Error errorMessage) ->
-                    sendMessage logger telegramToken chatId errorMessage |> ignore
-                
-                | None ->
-                    ()
+            handleUpdate logger telegramToken update
             Successful.OK "")
+
 
     let logRequest (logger : ILogger) : HttpHandler =
         handleContext (fun ctx ->
@@ -46,6 +48,10 @@ module Api =
                 logger.LogInformation($"Method: {ctx.Request.Method}\nBody: {body}")
                 return Some ctx
             })
+
+
+    let webHookRoute telegramToken = $"/api/{telegramToken}"
+
 
     let app logger telegramToken : HttpHandler =
         logRequest logger >=>
