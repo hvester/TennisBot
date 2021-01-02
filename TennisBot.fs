@@ -7,6 +7,7 @@ module TennisBot =
     open BookingScraper
 
     type Command =
+        | ShowBestCourts
         | ShowAllCourts
 
     type Message =
@@ -47,6 +48,28 @@ module TennisBot =
         $"/{toSnakeCase case.Name}"
 
 
+    let filterBestAvailableCourts (availableCourts : AvailableCourtTimeSlot list) =
+        let now = DateTime.UtcNow.AddHours(2.0) // TODO: Fix this hack with NodaTime
+        availableCourts
+        |> List.distinctBy (fun x -> x.Time)
+        |> List.sortByDescending (fun x ->
+            let hour = x.Time.Hour
+            let timePoints =
+                if hour < 15 then 0
+                elif hour < 16 then 1
+                elif hour < 18 then 3
+                elif hour < 20 then 5
+                elif hour < 21 then 3
+                elif hour < 22 then 1
+                else 0
+            let dayPoints =
+                8.0 - x.Time.Subtract(now).TotalDays
+                |> min 5.0
+                |> max 0.0
+            float (1 + timePoints) * (1.0 + dayPoints))
+        |> List.truncate 5
+                
+
     let handleMessage message =
         match message with
         | Text _ ->
@@ -58,6 +81,13 @@ module TennisBot =
             ]
             |> String.concat "\n"
             |> async.Return
+
+        | Command ShowBestCourts ->
+            async {
+                let! availableCourts = scrapeAvailableCourts()
+                return renderAvailableCourts (filterBestAvailableCourts availableCourts)
+            }
+
 
         | Command ShowAllCourts ->
             async {
