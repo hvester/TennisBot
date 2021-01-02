@@ -20,7 +20,10 @@ module TennisBot =
             for date, courts in List.groupBy (fun x -> x.Time.Date) availableCourts do
                 $"""---Date: {date.ToString("MM-dd")}---"""
                 for time, group in courts |> Seq.groupBy (fun c -> c.Time) do
-                    let courtCodes = group |> Seq.map (fun c -> c.Court)
+                    let courtCodes =
+                        group
+                        |> Seq.map (fun c ->
+                            $"""<a href="{c.BookingLink}">{c.Court}</a>""")
                     $"""Time: {time.ToString("HH:mm")}, Courts: {String.concat ", " courtCodes}"""
         ]
         |> String.concat "\n"

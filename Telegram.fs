@@ -103,5 +103,6 @@ module Telegram =
         {|
             ChatId = chatId
             Text = text
+            ParseMode = "HTML"
         |}
         |> makeRequest logger telegramToken "sendMessage"

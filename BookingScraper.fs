@@ -8,13 +8,14 @@ module BookingScraper =
 
     type AvailableCourtTimeSlot =
         { Time : DateTime
-          Court : string }
+          Court : string
+          BookingLink : string }
     
-    let meilahtiUrl = "https://meilahti.slsystems.fi/booking/booking-calendar"
+    let meilahtiUrl = "https://meilahti.slsystems.fi"
 
     
     let generateBookingPageUrl baseUrl (date : DateTime) =
-        $"""{baseUrl}?BookingCalForm%%5Bp_pvm%%5D={date.ToString("yyyy-MM-dd")}"""
+        $"""{baseUrl}/booking/booking-calendar?BookingCalForm%%5Bp_pvm%%5D={date.ToString("yyyy-MM-dd")}"""
 
 
     let parseDate (doc : HtmlDocument) =
@@ -27,7 +28,7 @@ module BookingScraper =
         (year, month, day)
 
 
-    let parseAvailableTimes (doc : HtmlDocument) =
+    let parseAvailableTimes baseUrl (doc : HtmlDocument) =
         let year, month, day = parseDate doc
         doc.CssSelect(".s-avail > a")
         |> Seq.map (fun htmlNode ->
@@ -36,14 +37,17 @@ module BookingScraper =
             let court = parts.[0]
             let hours = Int32.Parse parts.[1]
             let minutes = Int32.Parse parts.[2]
-            { Time = DateTime(year, month, day, hours, minutes, 0); Court = court })
+            let bookingLink = baseUrl + htmlNode.Attribute("href").Value()
+            { Time = DateTime(year, month, day, hours, minutes, 0)
+              Court = court
+              BookingLink = bookingLink })
 
 
     let scrapeBookingPage date =
         async {
             let url = generateBookingPageUrl meilahtiUrl date
             let! doc = HtmlDocument.AsyncLoad(url)
-            return parseAvailableTimes doc
+            return parseAvailableTimes meilahtiUrl doc
         }
 
 
