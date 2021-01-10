@@ -92,11 +92,13 @@ module Telegram =
 
     let private makeRequest (logger : ILogger) telegramToken method payload = 
         let url = getUrl telegramToken method
+        let payloadString = Json.serialize payload
+        logger.LogInformation($"Making request to Telegram API\nMethod: {method}\nPayload: {payloadString}")
         let content = new StringContent(Json.serialize payload, Encoding.UTF8, "application/json")
         task {
             let! response = httpClient.PostAsync(url, content)
             let! responseString = response.Content.ReadAsStringAsync()
-            logger.LogDebug responseString
+            logger.LogInformation responseString
         }
 
     let sendMessage logger telegramToken (chatId : int64) (text : string) =

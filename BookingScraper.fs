@@ -7,15 +7,36 @@ open FSharp.Data
 module BookingScraper =
 
     type AvailableCourtTimeSlot =
-        { Time : DateTime
-          Court : string
-          BookingLink : string }
+        {
+            TennisCenter : string
+            Time : DateTime
+            Court : string
+            BookingLink : string
+            BookingTableLink : string
+        }
+
+    let meilahtiBaseUrl = "https://meilahti.slsystems.fi"
+    let meilahtiTennisTab = 1
     
-    let meilahtiUrl = "https://meilahti.slsystems.fi"
+    let taliTaivallahtiBaseUrl = "https://varaukset.talintenniskeskus.fi"
+    let taliTennisTab = 1
+    let taivallahtiTennisTab = 5    
+
+    let tennisCenters =
+        [
+            ("Meilahti", meilahtiBaseUrl, 1)
+            ("Taivallahti", taliTaivallahtiBaseUrl, 5)
+            ("Tali", taliTaivallahtiBaseUrl, 1)
+        ]
 
     
-    let generateBookingPageUrl baseUrl (date : DateTime) =
-        $"""{baseUrl}/booking/booking-calendar?BookingCalForm%%5Bp_pvm%%5D={date.ToString("yyyy-MM-dd")}"""
+    let generateBookingPageUrl baseUrl tabNumber (date : DateTime) =
+        [
+            $"{baseUrl}/booking/booking-calendar"
+            $"?BookingCalForm%%5Bp_laji%%5D={tabNumber}"
+            $"""&BookingCalForm%%5Bp_pvm%%5D={date.ToString("yyyy-MM-dd")}"""
+        ]
+        |> String.concat ""
 
 
     let parseDate (doc : HtmlDocument) =
@@ -28,8 +49,7 @@ module BookingScraper =
         (year, month, day)
 
 
-    let parseAvailableTimes baseUrl (doc : HtmlDocument) =
-        let year, month, day = parseDate doc
+    let parseAvailableTimeSlots (doc : HtmlDocument) =
         doc.CssSelect(".s-avail > a")
         |> Seq.map (fun htmlNode ->
             let text = htmlNode.InnerText()
@@ -37,17 +57,32 @@ module BookingScraper =
             let court = parts.[0]
             let hours = Int32.Parse parts.[1]
             let minutes = Int32.Parse parts.[2]
-            let bookingLink = baseUrl + htmlNode.Attribute("href").Value()
-            { Time = DateTime(year, month, day, hours, minutes, 0)
-              Court = court
-              BookingLink = bookingLink })
+            let relativeLink = htmlNode.Attribute("href").Value()
+            (hours, minutes, court, relativeLink))
 
 
-    let scrapeBookingPage date =
+    let scrapeBookingPage tennisCenterName baseUrl tabNumber date =
         async {
-            let url = generateBookingPageUrl meilahtiUrl date
-            let! doc = HtmlDocument.AsyncLoad(url)
-            return parseAvailableTimes meilahtiUrl doc
+            let bookingTableUrl = generateBookingPageUrl baseUrl tabNumber date
+            let! doc = HtmlDocument.AsyncLoad(bookingTableUrl)
+            // If booking table is not available for the requested date then default
+            // booking page is returned (which is same or next day)
+            let year, month, day = parseDate doc
+            if year = date.Year && month = date.Month && day = date.Day then
+                return
+                    parseAvailableTimeSlots doc
+                    |> Seq.map (fun (hours, minutes, court, relativeLink) ->
+                        {
+                            TennisCenter = tennisCenterName
+                            Time = DateTime(year, month, day, hours, minutes, 0)
+                            Court = court
+                            BookingLink = baseUrl + relativeLink
+                            BookingTableLink = bookingTableUrl
+                        })
+                    |> Seq.toList
+            else
+                // Redirected to other page, i.e. no courts available for the requested date
+                return []
         }
 
 
@@ -55,9 +90,14 @@ module BookingScraper =
         async {
             let today = DateTime.Now.Date
             let! allAvailableCourts =
-                [ for n in 0 .. 7 do
-                    let date = today.AddDays(float n)
-                    yield scrapeBookingPage date ]
+                [
+                    for n in 0 .. 2 do
+                        let date = today.AddDays(float n)
+                        for tennisCenterName, baseUrl, tabnumber in tennisCenters do
+                            yield scrapeBookingPage tennisCenterName baseUrl tabnumber date ]
                 |> Async.Parallel
-            return Seq.concat allAvailableCourts |> Seq.distinct |> Seq.toList
+            return
+                allAvailableCourts
+                |> Array.toList
+                |> List.concat
         }

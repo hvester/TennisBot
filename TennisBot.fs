@@ -17,14 +17,15 @@ module TennisBot =
 
     let renderAvailableCourts availableCourts =
         [
-            for date, courts in List.groupBy (fun x -> x.Time.Date) availableCourts do
-                $"""---Date: {date.ToString("MM-dd")}---"""
+            for (tennisCenter, date), courts in List.groupBy (fun x -> (x.TennisCenter, x.Time.Date)) availableCourts do
+                $"""<b><u>{tennisCenter} - {date.DayOfWeek} {date.ToString("d.M.")}</u></b>"""
                 for time, group in courts |> Seq.groupBy (fun c -> c.Time) do
                     let courtCodes =
                         group
                         |> Seq.map (fun c ->
                             $"""<a href="{c.BookingLink}">{c.Court}</a>""")
-                    $"""Time: {time.ToString("HH:mm")}, Courts: {String.concat ", " courtCodes}"""
+                    $"""<b>{time.ToString("HH:mm")}:</b> {String.concat ", " courtCodes}"""
+                ""
         ]
         |> String.concat "\n"
 
