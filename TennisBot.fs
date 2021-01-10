@@ -14,10 +14,33 @@ module TennisBot =
         | Command of Command
         | Text of string
 
+    let maxTelegramMessageLength = 4096
+
+    let toMessages maxMessageSize (parts : string list) =
+        [
+            let mutable messageParts = ResizeArray()
+            let mutable messageSize = 0
+            for part in parts do
+                let newMessageSize = messageSize + part.Length
+                if messageParts.Count = 0 || newMessageSize <= maxMessageSize then
+                    messageParts.Add part
+                    messageSize <- newMessageSize
+                else
+                    yield messageParts
+                    messageParts <- ResizeArray([part])
+                    messageSize <- part.Length
+
+            if messageParts.Count > 0 then
+                yield messageParts
+        ]
+        |> List.map (String.concat "\n")
+
 
     let renderAvailableCourts availableCourts =
-        [
-            for (tennisCenter, date), courts in List.groupBy (fun x -> (x.TennisCenter, x.Time.Date)) availableCourts do
+        availableCourts
+        |> List.groupBy (fun x -> (x.TennisCenter, x.Time.Date))
+        |> List.map (fun ((tennisCenter, date), courts) ->
+            [
                 $"""<b><u>{tennisCenter} - {date.DayOfWeek} {date.ToString("d.M.")}</u></b>"""
                 for time, group in courts |> Seq.groupBy (fun c -> c.Time) do
                     let courtCodes =
@@ -26,8 +49,36 @@ module TennisBot =
                             $"""<a href="{c.BookingLink}">{c.Court}</a>""")
                     $"""<b>{time.ToString("HH:mm")}:</b> {String.concat ", " courtCodes}"""
                 ""
-        ]
-        |> String.concat "\n"
+            ]
+            |> String.concat "\n")
+        |> toMessages maxTelegramMessageLength
+
+
+    let renderAvailableCourtsCompactly availableCourts =
+        availableCourts
+        |> List.groupBy (fun x -> x.Time.Date)
+        |> List.map (fun (date, courtsForDate) ->
+            [
+                $"""<b><u>{date.DayOfWeek} {date.ToString("d.M.")}</u></b>"""
+
+                for tennisCenterName, courts in List.groupBy (fun x -> x.TennisCenter) courtsForDate do
+                    [
+                        let bookingTableLink = (List.head courts).BookingTableLink
+                        $"""<a href="{bookingTableLink}"><b>{tennisCenterName}</b></a>: """
+
+                        courts
+                        |> List.groupBy (fun c -> c.Time)
+                        |> List.map (fun (time, group) ->
+                            let firstBookingLink = (List.head group).BookingLink
+                            $"""<a href="{firstBookingLink}">{time.ToString("HH:mm")}</a>""")
+                        |> String.concat ", "
+                    ]
+                    |> String.concat ""
+
+                ""
+            ]
+            |> String.concat "\n")
+        |> toMessages maxTelegramMessageLength
 
     
     let toSnakeCase (str : string) =
@@ -84,6 +135,7 @@ module TennisBot =
                     commandToString command
             ]
             |> String.concat "\n"
+            |> List.singleton
             |> async.Return
 
         | Command ShowBestCourts ->
@@ -96,5 +148,5 @@ module TennisBot =
         | Command ShowAllCourts ->
             async {
                 let! availableCourts = scrapeAvailableCourts()
-                return renderAvailableCourts availableCourts
+                return renderAvailableCourtsCompactly availableCourts
             }

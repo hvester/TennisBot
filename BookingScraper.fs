@@ -91,7 +91,7 @@ module BookingScraper =
             let today = DateTime.Now.Date
             let! allAvailableCourts =
                 [
-                    for n in 0 .. 2 do
+                    for n in 0 .. 7 do
                         let date = today.AddDays(float n)
                         for tennisCenterName, baseUrl, tabnumber in tennisCenters do
                             yield scrapeBookingPage tennisCenterName baseUrl tabnumber date ]

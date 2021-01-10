@@ -20,8 +20,9 @@ module Api =
         |> function
             | Some (Ok message) ->
                 async {
-                    let! respose = handleMessage message
-                    do! sendMessage logger telegramToken chatId respose |> Async.AwaitTask
+                    let! replyMessages = handleMessage message
+                    for message in replyMessages do                        
+                        do! sendMessage logger telegramToken chatId message |> Async.AwaitTask
                 }
                 |> Async.Start
 
